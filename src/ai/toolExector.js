@@ -2,29 +2,13 @@ const { todoService } = require('../services')
 const yup = require('yup')
 const { Op } = require('sequelize')
 
-const updateSchema = yup.object({
-  id: yup.number().required(),
-
-  task: yup
-    .string()
-    .transform((value, originalValue) => {
-      if (typeof originalValue === 'string' && originalValue.trim() === '') {
-        return undefined
-      }
-      return value?.trim()
-    })
-    .optional(),
-
-  completed: yup.boolean().optional(),
-})
-
 async function executeTool(name, args) {
   console.log(name, args)
   switch (name) {
     case 'createTodo':
       return await todoService.createTodo(args.task)
 
-    case 'getTodos':
+    case 'listTodos':
       return await todoService.getTodos(args)
 
     case 'countTodos':
@@ -36,11 +20,9 @@ async function executeTool(name, args) {
     case 'deleteTodo':
       return await todoService.deleteTodo(args.id)
 
-    case 'updateTodo':
-      const { id, ...body } = await updateSchema.validate(args, {
-        stripUnknown: true,
-      })
-      return await todoService.updateTodo(id, body)
+    case 'bulkUpdateTodos':
+      // const { id, ...body } = args
+      return await todoService.updateTodo(args)
     case 'getTodosForToday':
       const today = new Date()
       const startOfDay = new Date(
@@ -53,8 +35,6 @@ async function executeTool(name, args) {
         today.getMonth(),
         today.getDate() + 1
       )
-
-      console.log({ $gte: startOfDay, $lt: endOfDay })
 
       return await todoService.getTodos({
         createdAt: {
@@ -75,7 +55,10 @@ async function executeTool(name, args) {
         todayCount.getMonth(),
         todayCount.getDate() + 1
       )
-
+      console.log({
+        [Op.gte]: startOfDayCount,
+        [Op.lt]: endOfDayCount,
+      })
       return await todoService.getTodosCount({
         createdAt: {
           [Op.gte]: startOfDayCount,

@@ -1,0 +1,16 @@
+services:
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: todo_db
+      MYSQL_USER: todo_user
+      MYSQL_PASSWORD: todoagent@123
+    ports:
+      - '3306:3306'
+    volumes:
+      - todo_mysql_data:/var/lib/mysql
+
+volumes:
+  todo_mysql_data:
