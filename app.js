@@ -1,8 +1,10 @@
 require('dotenv').config()
 const express = require('express')
 const cors = require('cors')
-const routes = require('./src/routes')
 
+const logger = require('./src/config/logger')
+
+const routes = require('./src/routes')
 const sequelize = require('./src/config/database')
 
 sequelize

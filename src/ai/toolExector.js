@@ -3,10 +3,10 @@ const yup = require('yup')
 const { Op } = require('sequelize')
 
 async function executeTool(name, args) {
-  console.log(name, args)
+  console.log(`Executing tool: ${name} with args:`, args)
   switch (name) {
     case 'createTodo':
-      return await todoService.createTodo(args.task)
+      return await todoService.createTodo(args)
 
     case 'listTodos':
       return await todoService.getTodos(args)
@@ -17,8 +17,8 @@ async function executeTool(name, args) {
     case 'getTodoById':
       return await todoService.getTodoById(args.id)
 
-    case 'deleteTodo':
-      return await todoService.deleteTodo(args.id)
+    case 'bulkDeleteTodos':
+      return await todoService.deleteTodo(args)
 
     case 'bulkUpdateTodos':
       // const { id, ...body } = args

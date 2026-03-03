@@ -1,17 +1,38 @@
-const { gt } = require('zod')
-
 const createTodoTool = {
   type: 'function',
   name: 'createTodo',
   description: `
-Create a new todo item.
-Use ONLY when user intends to add or create a new task.
-Never use for modifications.
-`,
+    This tool is strictly for creating new tasks. Never use for updates or modifications.
+
+    Routing:
+    - Use ONLY when user intends to add or create a new task.
+    - Never use for modifications.
+
+    Arguments Rules:
+    - Only include fields explicitly mentioned by the user.
+    - If user does not provide a due date, then add a due date with 2 days from now. This is not considered inventing data, but rather filling in a reasonable default for missing information.
+
+    Use this tool if user mentions:
+    - add
+    - create
+    - new task
+    - schedule (but only if it clearly indicates creating a new task, not modifying an existing one)
+
+    Do NOT use this tool if user mentions:
+    - modify
+    - update
+    - change
+    - mark
+    - set
+    - edit
+    - reschedule
+    - move  
+    `,
   parameters: {
     type: 'object',
     additionalProperties: false,
     properties: {
+      additionalProperties: false,
       task: { type: 'string', minLength: 1 },
       description: { type: 'string' },
       status: {
@@ -27,6 +48,7 @@ Never use for modifications.
         format: 'date-time',
       },
     },
+    minProperties: 1,
     required: ['task'],
   },
 }
@@ -35,18 +57,28 @@ const getTodosTool = {
   type: 'function',
   name: 'listTodos',
   description: `
-  filters go inside "where".
-  fields to select go inside "selected" array.
-  Use ONLY when user intends to view, list, check, or retrieve tasks.
-  Never use for modifications or updates.
+    This tool is strictly for retrieving tasks. Never use for updates or modifications.
 
-  this tool is not for updating or modifying tasks in any way. Only for retrieval.
+    Routing:
+    - Use ONLY when user intends to view, list, check, or retrieve tasks.
+    - Never use for modifications.
 
-Time Handling Exception:
-- For relative date ranges like "past 2 days", "last week", "today", "tomorrow", "last week day to till now" etc.,
-  you MUST generate both start and end boundaries.
-- The end boundary is the current server time.
-- This is not considered inventing data.
+    Arguments Rules:
+
+    1. Filters go inside "where".
+    2. Fields go inside "selected" (must be an array).
+    3. "selected" must ALWAYS be present in the output.
+
+    Field Selection Logic:
+    - If the user specifies fields → use only those fields.
+    - If the user does NOT specify fields → set:
+      selected = ["id", "task", "status", "priority", "dueDate", "createdAt"].
+    - Do NOT select all database columns unless explicitly requested.
+
+    Time Handling:
+    - For relative ranges (today, past 2 days, last week, etc.)
+      - Generate both start and end boundaries.
+      - End boundary must be current server time.
 `,
   parameters: {
     type: 'object',
@@ -56,29 +88,50 @@ Time Handling Exception:
         type: 'object',
         additionalProperties: false,
         properties: {
-          id: { type: 'string' },
+          id: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+                items: {
+                  type: 'integer',
+                },
+              },
+            },
+          },
           status: {
             type: 'object',
-            in: {
-              type: 'array',
-              items: {
-                type: 'string',
-                enum: ['pending', 'in_progress', 'completed'],
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+                items: {
+                  type: 'string',
+                  enum: ['pending', 'in_progress', 'completed'],
+                },
               },
             },
           },
           priority: {
             type: 'object',
-            in: {
-              type: 'array',
-              items: {
-                type: 'string',
-                enum: ['low', 'medium', 'high'],
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+                items: {
+                  type: 'string',
+                  enum: ['low', 'medium', 'high'],
+                },
               },
             },
           },
           dueDate: {
             type: 'object',
+            additionalProperties: false,
             properties: {
               gte: { type: 'string', format: 'date-time' },
               lte: { type: 'string', format: 'date-time' },
@@ -89,6 +142,7 @@ Time Handling Exception:
           },
           createdAt: {
             type: 'object',
+            additionalProperties: false,
             properties: {
               gte: { type: 'string', format: 'date-time' },
               lte: { type: 'string', format: 'date-time' },
@@ -99,6 +153,7 @@ Time Handling Exception:
           },
           task: { type: 'string' },
         },
+        minProperties: 0,
       },
       limit: {
         type: 'integer',
@@ -107,7 +162,7 @@ Time Handling Exception:
       },
       orderBy: {
         type: 'string',
-        enum: ['createdAt', 'dueDate', 'priority', 'status'],
+        enum: ['id', 'task', 'createdAt', 'dueDate', 'priority', 'status'],
       },
       orderDirection: {
         type: 'string',
@@ -115,6 +170,7 @@ Time Handling Exception:
       },
       selected: {
         type: 'array',
+        additionalProperties: false,
         items: {
           type: 'string',
           enum: [
@@ -136,32 +192,46 @@ const updateTodoTool = {
   type: 'function',
   name: 'bulkUpdateTodos',
   description: `
-Update existing todos.
+      This tool is strictly for modifying existing tasks. Never use for creating new tasks.
+      Routing:
+      - Use ONLY when user intends to modify, update, change, mark, set, edit, reschedule, or move existing tasks.
+      - Never use for creating new tasks.
 
-Use this when user intends to modify, change, mark, set, or update tasks.
-Filters go inside "where".
-Fields to modify go inside "updates".
-Only include explicitly mentioned fields.
+      Arguments Rules:
+      1. Filters go inside "where".
+      2. Fields to modify go inside "updates".
+      3. Only include explicitly mentioned fields in both "where" and "updates". Never invent or assume missing information.
+      4. Do NOT use this tool if the user's intent is to create a new task. In such cases, use the "createTodo" tool instead.   
 `,
   parameters: {
     type: 'object',
     additionalProperties: false,
     properties: {
-      action: {
-        type: 'string',
-        enum: ['update'],
-      },
       where: {
         type: 'object',
         additionalProperties: false,
         properties: {
-          id: { type: 'string' },
+          id: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+                items: {
+                  type: 'integer',
+                },
+              },
+            },
+          },
           status: {
             type: 'object',
             additionalProperties: false,
             properties: {
               in: {
                 type: 'array',
+                additionalProperties: false,
+
                 items: {
                   type: 'string',
                   enum: ['pending', 'in_progress', 'completed'],
@@ -171,16 +241,22 @@ Only include explicitly mentioned fields.
           },
           priority: {
             type: 'object',
-            in: {
-              type: 'array',
-              items: {
-                type: 'string',
-                enum: ['low', 'medium', 'high'],
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+
+                items: {
+                  type: 'string',
+                  enum: ['low', 'medium', 'high'],
+                },
               },
             },
           },
           dueDate: {
             type: 'object',
+            additionalProperties: false,
             properties: {
               gte: { type: 'string', format: 'date-time' },
               lte: { type: 'string', format: 'date-time' },
@@ -191,6 +267,7 @@ Only include explicitly mentioned fields.
           },
           createdAt: {
             type: 'object',
+            additionalProperties: false,
             properties: {
               gte: { type: 'string', format: 'date-time' },
               lte: { type: 'string', format: 'date-time' },
@@ -201,6 +278,7 @@ Only include explicitly mentioned fields.
           },
           task: { type: 'string' },
         },
+        minProperties: 1,
       },
       updates: {
         type: 'object',
@@ -218,10 +296,102 @@ Only include explicitly mentioned fields.
           },
           dueDate: { type: 'string', format: 'date-time' },
         },
+        minProperties: 1,
       },
     },
     required: ['where', 'updates'],
   },
 }
 
-module.exports = [createTodoTool, getTodosTool, updateTodoTool]
+const deleteTodos = {
+  type: 'function',
+  name: 'bulkDeleteTodos',
+  description: `
+    Use this tool if user mentions:
+    - delete
+    - remove
+    - erase
+    - clear
+
+    Filters go inside "where".
+`,
+  parameters: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      where: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          id: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+                items: {
+                  type: 'integer',
+                },
+              },
+            },
+          },
+          status: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+                items: {
+                  type: 'string',
+                  enum: ['pending', 'in_progress', 'completed'],
+                },
+              },
+            },
+          },
+          priority: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              in: {
+                type: 'array',
+                additionalProperties: false,
+                items: {
+                  type: 'string',
+                  enum: ['low', 'medium', 'high'],
+                },
+              },
+            },
+          },
+          dueDate: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              gte: { type: 'string', format: 'date-time' },
+              lte: { type: 'string', format: 'date-time' },
+              gt: { type: 'string', format: 'date-time' },
+              lt: { type: 'string', format: 'date-time' },
+              eq: { type: 'string', format: 'date-time' },
+            },
+          },
+          createdAt: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              gte: { type: 'string', format: 'date-time' },
+              lte: { type: 'string', format: 'date-time' },
+              gt: { type: 'string', format: 'date-time' },
+              lt: { type: 'string', format: 'date-time' },
+              eq: { type: 'string', format: 'date-time' },
+            },
+          },
+          task: { type: 'string' },
+        },
+        minProperties: 1,
+      },
+    },
+  },
+}
+
+module.exports = [createTodoTool, getTodosTool, updateTodoTool, deleteTodos]

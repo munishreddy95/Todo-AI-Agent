@@ -18,10 +18,10 @@ function convertFilters(where) {
       if (value.lt) converted[key][Op.lt] = value.lt
       if (value.eq) converted[key][Op.eq] = value.eq
     }
-
     if (value.in) {
       converted[key] = {
-        [Op.in]: value.in,
+        [Op.in]:
+          typeof value.in == 'object' ? Object.values(value.in) : value.in,
       }
     }
   }
@@ -29,19 +29,9 @@ function convertFilters(where) {
   return converted
 }
 
-function normalizeInOperator(obj) {
-  if (obj && typeof obj === 'object' && !Array.isArray(obj)) {
-    const values = Object.values(obj)
-    if (values.length > 0 && values.every((v) => typeof v === 'string')) {
-      return values
-    }
-  }
-  return obj
-}
-
 exports.createTodo = async (task) => {
   try {
-    const newTodo = await todoModel.create({ task })
+    const newTodo = await todoModel.create(task)
     return newTodo
   } catch (error) {
     console.error('Error creating todo:', error)
@@ -49,74 +39,19 @@ exports.createTodo = async (task) => {
   }
 }
 
-function applyFieldSelection(args, allowedFields = []) {
-  const fieldsToApplyArray = Object.values(args || [])
-  if (!Array.isArray(fieldsToApplyArray)) {
-    return {}
-  }
-
-  const selected = {}
-
-  for (const field of fieldsToApplyArray) {
-    if (
-      allowedFields.includes(field) &&
-      args[field] !== undefined &&
-      args[field] !== null &&
-      args[field] !== ''
-    ) {
-      selected[field] = args[field]
-    }
-  }
-
-  return selected
-}
-
-const FIELD_MAPPERS = {
-  id: (value, where) => {
-    where.id = value
-  },
-  status: (value, where) => {
-    where.status = value
-  },
-  priority: (value, where) => {
-    where.priority = value
-  },
-  task: (value, where) => {
-    where.task = { [Op.like]: `%${value}%` }
-  },
-  dueBefore: (value, where) => {
-    where.dueDate = where.dueDate || {}
-    where.dueDate[Op.lt] = new Date(value)
-  },
-  dueAfter: (value, where) => {
-    where.dueDate = where.dueDate || {}
-    where.dueDate[Op.gt] = new Date(value)
-  },
-  createdBefore: (value, where) => {
-    where.createdAt = where.createdAt || {}
-    where.createdAt[Op.lt] = new Date(value)
-  },
-  createdAfter: (value, where) => {
-    where.createdAt = where.createdAt || {}
-    where.createdAt[Op.gt] = new Date(value)
-  },
-}
-
 exports.getTodos = async (args) => {
   try {
-    const sequelizeWhere = {}
-
-    sequelizeWhere = convertFilters(args.where || {})
-
-    const selectedFields = args.selected || []
-
-    for (const field in filteredArgs) {
-      FIELD_MAPPERS[field](filteredArgs[field], sequelizeWhere)
-    }
+    const sequelizeWhere = convertFilters(args.where || {})
+    const selectedFields = args.selected ? Object.values(args.selected) : []
+    const limit = args.limit || 20
+    const offset = args.offset || 0
+    const orderBy = args.orderBy || 'createdAt'
+    const orderDirection = args.orderDirection || 'DESC'
     return todoModel.findAll({
       where: sequelizeWhere,
-      limit: 20,
-      order: [['createdAt', 'DESC']],
+      limit: limit,
+      offset: offset,
+      order: [[orderBy, orderDirection]],
       attributes: selectedFields,
     })
   } catch (error) {
@@ -146,14 +81,8 @@ exports.getTodoById = async (id) => {
 }
 
 exports.updateTodo = async (args) => {
-  const sequelizeWhere = {}
-
-  console.log(args.where.status)
-
-  sequelizeWhere = convertFilters(args.where || {})
-
+  const sequelizeWhere = convertFilters(args.where || {})
   const updateFields = args.updates || {}
-
   try {
     const todo = await todoModel.update(updateFields, {
       where: sequelizeWhere,
@@ -168,7 +97,7 @@ exports.updateTodo = async (args) => {
   }
 }
 
-exports.deleteTodo = async (id) => {
+exports.deleteTodoById = async (id) => {
   try {
     const todo = await todoModel.findByPk(id)
 
@@ -180,6 +109,22 @@ exports.deleteTodo = async (id) => {
     return { message: 'Todo deleted successfully' }
   } catch (error) {
     console.error('Error deleting todo:', error)
+    throw error
+  }
+}
+
+exports.deleteTodo = async (args) => {
+  const sequelizeWhere = convertFilters(args.where || {})
+  try {
+    const deletedCount = await todoModel.destroy({
+      where: sequelizeWhere,
+    })
+    if (deletedCount === 0) {
+      throw new Error('Todos not found')
+    }
+    return { message: 'Todos deleted successfully' }
+  } catch (error) {
+    console.error('Error deleting todos:', error)
     throw error
   }
 }
